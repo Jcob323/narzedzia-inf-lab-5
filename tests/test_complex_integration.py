@@ -1,4 +1,6 @@
 from src.models import Apartment
+from src.models import ApartmentSettlement
+from src.models import TenantSettlement
 from src.manager import Manager
 from src.models import Parameters
 from src.models import Bill
@@ -69,3 +71,79 @@ def test_apartment_costs_with_optional_parameters():
 
     costs = manager.get_apartment_costs('apart-polanka')
     assert costs == 3532.0
+
+def test_create_apartment_settlement():
+    parameters = Parameters()
+    manager = Manager(parameters)
+    
+    initial_apartments_count = len(manager.apartments)
+
+    settlement_with_bills = manager.create_apartment_settlement("apart-polanka", 2025, 1)
+
+    assert len(manager.apartments) == initial_apartments_count
+    assert settlement_with_bills is not None
+    assert isinstance(settlement_with_bills, ApartmentSettlement)
+    assert settlement_with_bills.apartment == "apart-polanka"
+    assert settlement_with_bills.year == 2025
+    assert settlement_with_bills.month == 1
+    assert settlement_with_bills.total_rent_pln == 0.0
+    assert settlement_with_bills.total_bills_pln == 910.0
+    assert settlement_with_bills.total_due_pln == -910.0
+
+    settlement_no_bills = manager.create_apartment_settlement("apart-polanka", 2025, 2)
+
+    assert settlement_no_bills is not None
+    assert settlement_no_bills.total_rent_pln == 0.0
+    assert settlement_no_bills.total_bills_pln == 0.0
+    assert settlement_no_bills.total_due_pln == 0.0
+
+    assert manager.create_apartment_settlement("nie-istnieje", 2025, 1) is None
+
+def test_create_tenant_settlements():
+    parameters = Parameters()
+    manager = Manager(parameters)
+
+    apartment_settlement_2024 = ApartmentSettlement(
+        apartment="apart-polanka",
+        month=6,
+        year=2024,
+        total_rent_pln=0.0,
+        total_bills_pln=900.0,
+        total_due_pln=-900.0,
+    )
+
+    settlements_three = manager.create_tenant_settlements(apartment_settlement_2024)
+
+    assert len(settlements_three) == 3
+    assert all(isinstance(s, TenantSettlement) for s in settlements_three)
+    assert [s.tenant for s in settlements_three] == ["Jan Nowak", "Adam Kowalski", "Ewa Adamska"]
+    assert settlements_three[0].apartment_settlement == "apart-polanka"
+    assert settlements_three[0].month == 6
+    assert settlements_three[0].year == 2024
+    assert settlements_three[0].rent_pln == 0.0
+    assert settlements_three[0].bills_pln == 300.0
+    assert settlements_three[0].total_due_pln == 300.0
+    assert settlements_three[0].balance_pln == -300.0
+
+    apartment_settlement_2025 = ApartmentSettlement(
+        apartment="apart-polanka",
+        month=1,
+        year=2025,
+        total_rent_pln=0.0,
+        total_bills_pln=910.0,
+        total_due_pln=-910.0,
+    )
+
+    settlements_empty = manager.create_tenant_settlements(apartment_settlement_2025)
+
+    assert settlements_empty == []
+
+    manager.tenants = {"tenant-1": manager.tenants["tenant-1"]}
+
+    settlements_one = manager.create_tenant_settlements(apartment_settlement_2024)
+
+    assert len(settlements_one) == 1
+    assert settlements_one[0].tenant == "Jan Nowak"
+    assert settlements_one[0].bills_pln == 900.0
+    assert settlements_one[0].total_due_pln == 900.0
+    assert settlements_one[0].balance_pln == -900.0
